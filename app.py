@@ -2,15 +2,13 @@ import streamlit as st
 from openai import OpenAI
 import json
 import os
+import time
 
 # ── Initialize OpenAI client ─────────────────────────
-# Get API key from Streamlit secrets or environment variable
 api_key = st.secrets.get("OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY")
-
 if not api_key:
     st.error("⚠️ OpenAI API key not found! Set it in environment or Streamlit secrets.")
     st.stop()
-
 client = OpenAI(api_key=api_key)
 
 # ── System prompts ───────────────────────────────────
@@ -32,33 +30,38 @@ Open with a strong, specific first sentence. Return the letter text only.
 
 # ── Core functions ───────────────────────────────────
 def analyse_cv(cv_text):
-    resp = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role":"system", "content": SYSTEM_PROMPT},
-            {"role":"user", "content": f"Analyse this CV:\n\n{cv_text}"}
-        ],
-        temperature=0.3
-    )
     try:
+        resp = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role":"system", "content": SYSTEM_PROMPT},
+                {"role":"user", "content": f"Analyse this CV:\n\n{cv_text}"}
+            ],
+            temperature=0.3
+        )
         return json.loads(resp.choices[0].message.content)
     except json.JSONDecodeError:
-        st.warning("Failed to parse API response. Make sure your CV text is valid.")
+        st.warning("⚠️ Failed to parse API response. Make sure your CV text is valid.")
+        return None
+    except Exception as e:
+        st.error(f"⚠️ API Error: {e}")
         return None
 
 def generate_cover_letter(cv_text, analysis, role):
-    msg = (f'Target role: {role}\n'
-           f'Strengths: {analysis["strengths"]}\n'
-           f'CV: {cv_text}')
-    resp = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role":"system", "content": COVER_LETTER_PROMPT},
-            {"role":"user", "content": msg}
-        ],
-        temperature=0.7
-    )
-    return resp.choices[0].message.content
+    try:
+        msg = f'Target role: {role}\nStrengths: {analysis["strengths"]}\nCV: {cv_text}'
+        resp = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role":"system", "content": COVER_LETTER_PROMPT},
+                {"role":"user", "content": msg}
+            ],
+            temperature=0.7
+        )
+        return resp.choices[0].message.content
+    except Exception as e:
+        st.error(f"⚠️ API Error: {e}")
+        return "Failed to generate cover letter due to API limits."
 
 # ── Streamlit UI ────────────────────────────────────
 st.set_page_config(page_title="Smart CV Reviewer", page_icon="🎯")
@@ -92,7 +95,6 @@ if analyse_btn:
             st.session_state.cover_letter = generate_cover_letter(
                 cv_input, st.session_state.analysis, role_input
             )
-        # Reset chat history when new CV is analysed
         st.session_state.chat_history = []
 
 # ── Display analysis results ─────────────────────────
@@ -118,13 +120,13 @@ if st.session_state.analysis:
 
     # ── Phase 3: Multi-turn refinement chat ──────────
     st.divider()
-    st.subheader("Search for an answer")
-    st.caption("Ask the AI to adjust anything: shorten the letter, change tone, rewrite a section.")
+    st.subheader("Ask AI for adjustments")
+    st.caption("Ask to shorten, rewrite, or change tone of the cover letter.")
 
     for msg in st.session_state.chat_history:
         st.chat_message(msg["role"]).write(msg["content"])
 
-    if prompt := st.chat_input("What would you like to implement?"):
+    if prompt := st.chat_input("Type your question or instruction here..."):
         st.chat_message('user').write(prompt)
         st.session_state.chat_history.append({"role":"user","content":prompt})
 
@@ -134,8 +136,12 @@ if st.session_state.analysis:
             f"Original CV:\n{st.session_state.cv_text}"
         )
         messages = [{"role":"system","content":"You are a career coach. Context:\n" + context}] + st.session_state.chat_history
-        resp = client.chat.completions.create(model="gpt-4o", messages=messages, temperature=0.5)
-        reply = resp.choices[0].message.content
+
+        try:
+            resp = client.chat.completions.create(model="gpt-4o", messages=messages, temperature=0.5)
+            reply = resp.choices[0].message.content
+        except Exception as e:
+            reply = f"⚠️ API Error: {e}"
 
         st.chat_message('assistant').write(reply)
         st.session_state.chat_history.append({"role":"assistant","content":reply})
