@@ -6,7 +6,7 @@ import json
 # In Streamlit Cloud, secrets are stored in the dashboard.
 # Locally, set the env variable or use st.secrets.
 
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
 
  
 # ── System prompts (unchanged from CLI version) ─────
