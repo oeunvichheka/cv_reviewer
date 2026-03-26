@@ -4,7 +4,8 @@ import json
 import os
 import time
 from fastapi import FastAPI
-app = FastAPI()
+app = Flask(app.py)
+
 
 # ── Initialize OpenAI client ─────────────────────────
 api_key = st.secrets.get("OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY")
