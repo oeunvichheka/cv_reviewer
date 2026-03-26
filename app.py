@@ -5,7 +5,7 @@ import os
 import json
 
 app = FastAPI()
-
+API_KEY = os.environ.get("OPENAI_API_KEY", None)
 # Initialize OpenAI client
 api_key = os.environ.get("OPENAI_API_KEY")
 if not api_key:
