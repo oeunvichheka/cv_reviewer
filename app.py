@@ -4,16 +4,20 @@ from openai import OpenAI
 import os
 import json
 
-app = FastAPI()
-API_KEY = os.environ.get("OPENAI_API_KEY", None)
-# Initialize OpenAI client
+# -------------------------------
+# Initialize FastAPI and OpenAI
+# -------------------------------
+app = FastAPI(title="CV Analyzer & Cover Letter Generator")
+
 api_key = os.environ.get("OPENAI_API_KEY")
 if not api_key:
     raise Exception("OPENAI_API_KEY not set in environment")
 
 client = OpenAI(api_key=api_key)
 
+# -------------------------------
 # Prompts
+# -------------------------------
 SYSTEM_PROMPT = """
 You are an expert career coach and professional CV reviewer.
 Respond ONLY with a JSON object in this exact format:
@@ -30,54 +34,67 @@ Write a 200-280 word cover letter using specific CV achievements.
 Open with a strong, specific first sentence. Return the letter text only.
 """
 
-# Request models
+# -------------------------------
+# Request model
+# -------------------------------
 class CVRequest(BaseModel):
     cv_text: str
     role: str
 
-# Endpoint to analyze CV
+# -------------------------------
+# Endpoint: Analyze CV
+# -------------------------------
 @app.post("/analyze")
 async def analyze_cv(req: CVRequest):
     try:
-        resp = client.chat.completions.create(
+        response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role":"system", "content": SYSTEM_PROMPT},
-                {"role":"user", "content": f"Analyse this CV:\n\n{req.cv_text}"}
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": f"Analyse this CV:\n\n{req.cv_text}"}
             ],
             temperature=0.3
         )
-        analysis = json.loads(resp.choices[0].message.content)
+        # Parse JSON safely
+        analysis = json.loads(response.choices[0].message.content)
+        return {"analysis": analysis}
     except Exception as e:
         return {"error": str(e)}
-    return {"analysis": analysis}
 
-# Endpoint to generate cover letter
+# -------------------------------
+# Endpoint: Generate Cover Letter
+# -------------------------------
 @app.post("/coverletter")
 async def cover_letter(req: CVRequest):
     try:
-        # First analyze
+        # Step 1: Analyze CV
         analysis_resp = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role":"system", "content": SYSTEM_PROMPT},
-                {"role":"user", "content": f"Analyse this CV:\n\n{req.cv_text}"}
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": f"Analyse this CV:\n\n{req.cv_text}"}
             ],
             temperature=0.3
         )
         analysis = json.loads(analysis_resp.choices[0].message.content)
 
-        # Generate cover letter
-        msg = f'Target role: {req.role}\nStrengths: {analysis["strengths"]}\nCV: {req.cv_text}'
+        # Step 2: Generate Cover Letter
+        prompt_msg = (
+            f"Target role: {req.role}\n"
+            f"Strengths: {analysis['strengths']}\n"
+            f"CV: {req.cv_text}"
+        )
         cover_resp = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role":"system","content":COVER_LETTER_PROMPT},
-                {"role":"user","content":msg}
+                {"role": "system", "content": COVER_LETTER_PROMPT},
+                {"role": "user", "content": prompt_msg}
             ],
             temperature=0.7
         )
         cover_letter_text = cover_resp.choices[0].message.content
+
+        return {"analysis": analysis, "cover_letter": cover_letter_text}
+
     except Exception as e:
         return {"error": str(e)}
-    return {"analysis": analysis, "cover_letter": cover_letter_text}
