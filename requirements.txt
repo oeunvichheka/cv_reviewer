@@ -1,4 +1,6 @@
 openai>=1.0.0
 streamlit>=1.35.0
-flask
-gunicorn
+fastapi
+uvicorn
+openai
+pydantic
